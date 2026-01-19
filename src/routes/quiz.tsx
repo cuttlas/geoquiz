@@ -1,8 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { quizSearchParamsSchema, type Place, type Area } from "../lib/types";
+import { quizSearchParamsSchema, type Place } from "../lib/types";
 import { Button } from "../components/ui/button";
+import { QuizMap } from "../components/map/QuizMap";
+import { useState } from "react";
 
 export const Route = createFileRoute("/quiz")({
   validateSearch: quizSearchParamsSchema,
@@ -11,6 +13,7 @@ export const Route = createFileRoute("/quiz")({
 
 function QuizPage() {
   const search = Route.useSearch();
+  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
 
   // Lookup area IDs from slugs
   const adm1Area = useQuery(
@@ -21,36 +24,6 @@ function QuizPage() {
   const adm2Area = useQuery(
     api.areas.getBySlug,
     search.adm2 ? { slug: search.adm2 } : "skip"
-  );
-
-  // Get countries for regions quiz type at continent level
-  const countriesForRegions = useQuery(
-    api.areas.getCountriesByContinent,
-    search.type === "regions" && search.continent && !search.country
-      ? { continentName: search.continent }
-      : "skip"
-  );
-
-  // Get child regions for regions quiz type
-  const childRegions = useQuery(
-    api.areas.getChildAreas,
-    search.type === "regions" && adm1Area
-      ? { parentAreaId: adm1Area._id }
-      : "skip"
-  );
-
-  // Lookup country area to get child regions
-  const countryArea = useQuery(
-    api.areas.getBySlug,
-    search.type === "regions" && search.country && !search.adm1
-      ? { slug: getCountrySlug(search.country) }
-      : "skip"
-  );
-
-  // Get ADM1 regions for country-level regions quiz
-  const countryChildRegions = useQuery(
-    api.areas.getChildAreas,
-    countryArea ? { parentAreaId: countryArea._id } : "skip"
   );
 
   // Fetch places for cities/capitals quiz
@@ -68,80 +41,73 @@ function QuizPage() {
       : "skip"
   );
 
-  // Determine what items to display based on quiz type
-  let items: Array<{ name: string; subtitle: string; type: string }> = [];
-
-  if (search.type === "regions") {
-    // Regions quiz - display areas
-    let regions: Area[] = [];
-    if (search.adm1 && childRegions) {
-      regions = childRegions as Area[];
-    } else if (search.country && countryChildRegions) {
-      regions = countryChildRegions as Area[];
-    } else if (search.continent && countriesForRegions) {
-      regions = countriesForRegions as Area[];
-    }
-
-    items = regions.map((region) => ({
-      name: region.name,
-      subtitle: `${region.adminTypeName} (${region.countryCode})`,
-      type: "region",
-    }));
-  } else {
-    // Cities/Capitals quiz - display places
-    items = (places ?? []).map((place: Place) => ({
-      name: place.name,
-      subtitle: `${place.featureType} - ${formatPopulation(place.population)}`,
-      type: place.featureType,
-    }));
-  }
+  // For cities/capitals, use the places directly
+  const placesForMap = search.type !== "regions" ? (places ?? []) : [];
 
   // Build breadcrumb for current scope
   const breadcrumb = buildBreadcrumb(search);
 
   return (
-    <div className="min-h-screen p-8">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <Link to="/">
-            <Button variant="ghost" className="mb-4">
-              <ArrowLeftIcon className="w-4 h-4 mr-2" />
-              Back to Quiz Generator
-            </Button>
-          </Link>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Quiz: {search.type.charAt(0).toUpperCase() + search.type.slice(1)}
-          </h1>
-          <p className="text-gray-600">{breadcrumb}</p>
+    <div className="h-screen flex flex-col">
+      {/* Header */}
+      <div className="p-4 bg-white border-b border-gray-200 flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link to="/">
+              <Button variant="ghost" size="sm">
+                <ArrowLeftIcon className="w-4 h-4 mr-2" />
+                Back
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">
+                Quiz: {search.type.charAt(0).toUpperCase() + search.type.slice(1)}
+              </h1>
+              <p className="text-sm text-gray-600">{breadcrumb}</p>
+            </div>
+          </div>
+          <div className="text-sm text-gray-500">
+            {placesForMap.length} places
+          </div>
         </div>
+      </div>
 
-        {/* Quiz Items */}
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4">
-            {items.length} items in this quiz
-          </h2>
-        </div>
-
-        {/* Items Grid */}
-        {items.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            Loading quiz items...
+      {/* Map Container */}
+      <div className="flex-1 relative">
+        {search.type === "regions" ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+            <p className="text-gray-500">Regions quiz not yet supported on map</p>
+          </div>
+        ) : placesForMap.length === 0 ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+            <p className="text-gray-500">Loading places...</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {items.map((item, index) => (
-              <div
-                key={index}
-                className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
-              >
-                <div className="font-medium text-gray-900">{item.name}</div>
-                <div className="text-sm text-gray-500 mt-1">{item.subtitle}</div>
-              </div>
-            ))}
-          </div>
+          <QuizMap
+            places={placesForMap}
+            onPlaceClick={(place) => setSelectedPlace(place)}
+          />
         )}
       </div>
+
+      {/* Selected Place Info Panel */}
+      {selectedPlace && (
+        <div className="absolute bottom-4 left-4 bg-white p-4 rounded-lg shadow-lg max-w-xs z-[1000]">
+          <button
+            onClick={() => setSelectedPlace(null)}
+            className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
+          >
+            <CloseIcon className="w-4 h-4" />
+          </button>
+          <h3 className="font-semibold text-gray-900">{selectedPlace.name}</h3>
+          <p className="text-sm text-gray-600 capitalize">{selectedPlace.featureType}</p>
+          {selectedPlace.population && (
+            <p className="text-sm text-gray-500">
+              Population: {selectedPlace.population.toLocaleString()}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -161,47 +127,6 @@ function buildBreadcrumb(search: {
   return parts.join(" > ") || "World";
 }
 
-// Helper to format population
-function formatPopulation(pop?: number): string {
-  if (!pop) return "Unknown population";
-  if (pop >= 1_000_000) return `${(pop / 1_000_000).toFixed(1)}M`;
-  if (pop >= 1_000) return `${(pop / 1_000).toFixed(0)}K`;
-  return pop.toString();
-}
-
-// Helper to convert country code to slug (simplified)
-function getCountrySlug(countryCode: string): string {
-  // This is a simplified mapping - in production would use a proper lookup
-  const codeToSlug: Record<string, string> = {
-    FRA: "france",
-    DEU: "germany",
-    ITA: "italy",
-    ESP: "spain",
-    GBR: "united-kingdom",
-    POL: "poland",
-    NLD: "netherlands",
-    BEL: "belgium",
-    SWE: "sweden",
-    PRT: "portugal",
-    USA: "united-states",
-    CAN: "canada",
-    MEX: "mexico",
-    JPN: "japan",
-    CHN: "china",
-    IND: "india",
-    IDN: "indonesia",
-    KOR: "south-korea",
-    BRA: "brazil",
-    ARG: "argentina",
-    ZAF: "south-africa",
-    EGY: "egypt",
-    NGA: "nigeria",
-    AUS: "australia",
-    NZL: "new-zealand",
-  };
-  return codeToSlug[countryCode] ?? countryCode.toLowerCase();
-}
-
 // Simple arrow icon
 function ArrowLeftIcon({ className }: { className?: string }) {
   return (
@@ -219,6 +144,27 @@ function ArrowLeftIcon({ className }: { className?: string }) {
     >
       <path d="m12 19-7-7 7-7" />
       <path d="M19 12H5" />
+    </svg>
+  );
+}
+
+// Simple close icon
+function CloseIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
     </svg>
   );
 }

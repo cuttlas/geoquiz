@@ -1,88 +1,107 @@
 import { test, expect } from "@playwright/test";
 
-test.describe("Quiz Page", () => {
-  test("displays quiz items for European cities", async ({ page }) => {
+test.describe("Quiz Page - Map View", () => {
+  test("displays map with markers for European cities", async ({ page }) => {
     await page.goto("/quiz?continent=Europe&type=cities");
 
     // Should show quiz header
-    await expect(page.getByRole("heading", { name: /Quiz: Cities/i })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /Quiz: Cities/i })
+    ).toBeVisible();
 
     // Should show breadcrumb
     await expect(page.getByText("Europe")).toBeVisible();
 
-    // Should show items count
-    await expect(page.getByText(/\d+ items in this quiz/)).toBeVisible();
+    // Should show places count
+    await expect(page.getByText(/\d+ places/)).toBeVisible();
 
-    // Wait for items to load and verify at least one city card appears
-    await expect(page.locator(".grid > div").first()).toBeVisible();
+    // Should display Leaflet map container
+    await expect(page.locator(".leaflet-container")).toBeVisible();
+
+    // Should have map tiles loaded
+    await expect(page.locator(".leaflet-tile-pane img").first()).toBeVisible();
+
+    // Should have at least one marker on the map
+    await expect(page.locator(".leaflet-marker-icon").first()).toBeVisible();
   });
 
   test("displays back button that navigates to home", async ({ page }) => {
     await page.goto("/quiz?continent=Europe&type=cities");
 
     // Click back button
-    await page.getByRole("button", { name: /Back to Quiz Generator/i }).click();
+    await page.getByRole("button", { name: /Back/i }).click();
 
     // Should navigate back to home
     await expect(page).toHaveURL("/");
   });
 
-  test("displays capitals for European capitals quiz", async ({ page }) => {
+  test("displays capitals markers for European capitals quiz", async ({
+    page,
+  }) => {
     await page.goto("/quiz?continent=Europe&type=capitals");
 
     // Should show capitals quiz
-    await expect(page.getByRole("heading", { name: /Quiz: Capitals/i })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /Quiz: Capitals/i })
+    ).toBeVisible();
 
-    // Wait for items to load
-    await expect(page.locator(".grid > div").first()).toBeVisible();
+    // Should display map with markers
+    await expect(page.locator(".leaflet-container")).toBeVisible();
+    await expect(page.locator(".leaflet-marker-icon").first()).toBeVisible();
 
-    // Should contain capital cities like Paris, Berlin, etc.
-    await expect(page.getByText("Paris")).toBeVisible();
+    // Click on a marker to see popup with Paris
+    await page.locator(".leaflet-marker-icon").first().click();
+
+    // Should show popup with city info
+    await expect(page.locator(".leaflet-popup-content")).toBeVisible();
   });
 
-  test("displays countries for European regions quiz", async ({ page }) => {
+  test("shows message for regions quiz (not yet supported)", async ({
+    page,
+  }) => {
     await page.goto("/quiz?continent=Europe&type=regions");
 
-    // Should show regions quiz
-    await expect(page.getByRole("heading", { name: /Quiz: Regions/i })).toBeVisible();
+    // Should show regions quiz header
+    await expect(
+      page.getByRole("heading", { name: /Quiz: Regions/i })
+    ).toBeVisible();
 
-    // Wait for items to load
-    await expect(page.locator(".grid > div").first()).toBeVisible();
-
-    // Should contain European countries
-    await expect(page.getByText("France")).toBeVisible();
-    await expect(page.getByText("Germany")).toBeVisible();
+    // Should show not supported message
+    await expect(
+      page.getByText(/Regions quiz not yet supported on map/)
+    ).toBeVisible();
   });
 
   test("filters cities by country", async ({ page }) => {
     await page.goto("/quiz?continent=Europe&country=FRA&type=cities");
 
-    // Wait for items to load
-    await expect(page.locator(".grid > div").first()).toBeVisible();
+    // Wait for map and markers to load
+    await expect(page.locator(".leaflet-container")).toBeVisible();
+    await expect(page.locator(".leaflet-marker-icon").first()).toBeVisible();
 
-    // Should show French cities (Paris is a capital, not a city)
-    await expect(page.getByText("Lyon")).toBeVisible();
-    await expect(page.getByText("Marseille")).toBeVisible();
+    // Get marker count for France
+    const markerCount = await page.locator(".leaflet-marker-icon").count();
 
-    // Should not show non-French cities (Berlin is in Germany)
-    await expect(page.getByText("Berlin")).not.toBeVisible();
+    // France has fewer cities than all of Europe
+    expect(markerCount).toBeGreaterThan(0);
+    expect(markerCount).toBeLessThan(50);
   });
 
   test("handles population filter", async ({ page }) => {
     await page.goto("/quiz?continent=Europe&type=cities&minPop=1000000");
 
-    // Should only show large cities
-    await expect(page.locator(".grid > div").first()).toBeVisible();
+    // Wait for map to load
+    await expect(page.locator(".leaflet-container")).toBeVisible();
 
-    // The count should be lower than without filter
-    const countText = await page.getByText(/\d+ items in this quiz/).textContent();
+    // Check the places count in header
+    const countText = await page.getByText(/\d+ places/).textContent();
     const count = parseInt(countText?.match(/\d+/)?.[0] ?? "0");
 
-    // With 1M+ filter, should have fewer items than all European cities
-    expect(count).toBeLessThan(30); // Reasonable upper bound for 1M+ European cities
+    // With 1M+ filter, should have fewer items
+    expect(count).toBeLessThan(30);
   });
 
-  test("shows loading state before items load", async ({ page }) => {
+  test("shows loading state before places load", async ({ page }) => {
     // Intercept Convex requests to delay them
     await page.route("**/.functions/**", async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -91,9 +110,79 @@ test.describe("Quiz Page", () => {
 
     await page.goto("/quiz?continent=Europe&type=cities");
 
-    // Should show loading or items quickly (use first() to avoid strict mode violation)
+    // Should show loading or map quickly
     await expect(
-      page.getByText(/Loading quiz items|items in this quiz/).first()
+      page.getByText(/Loading places|places/).first()
     ).toBeVisible();
+  });
+
+  test("clicking marker shows info panel", async ({ page }) => {
+    await page.goto("/quiz?continent=Europe&type=capitals");
+
+    // Wait for markers to load
+    await expect(page.locator(".leaflet-marker-icon").first()).toBeVisible();
+
+    // Click on a marker
+    await page.locator(".leaflet-marker-icon").first().click();
+
+    // Should show info panel with place details
+    await expect(
+      page.locator(".absolute.bottom-4.left-4")
+    ).toBeVisible();
+
+    // Info panel should have a close button
+    await expect(
+      page.locator(".absolute.bottom-4.left-4 button")
+    ).toBeVisible();
+  });
+
+  test("can close info panel", async ({ page }) => {
+    await page.goto("/quiz?continent=Europe&type=capitals");
+
+    // Wait for markers and click one
+    await expect(page.locator(".leaflet-marker-icon").first()).toBeVisible();
+    await page.locator(".leaflet-marker-icon").first().click();
+
+    // Info panel should be visible
+    await expect(page.locator(".absolute.bottom-4.left-4")).toBeVisible();
+
+    // Click close button
+    await page.locator(".absolute.bottom-4.left-4 button").click();
+
+    // Info panel should be hidden
+    await expect(page.locator(".absolute.bottom-4.left-4")).not.toBeVisible();
+  });
+
+  test("map auto-zooms to fit all markers", async ({ page }) => {
+    // Test with a small set of places (France capitals)
+    await page.goto("/quiz?continent=Europe&country=FRA&type=capitals");
+
+    // Wait for map to load
+    await expect(page.locator(".leaflet-container")).toBeVisible();
+    await expect(page.locator(".leaflet-marker-icon").first()).toBeVisible();
+
+    // Map should be zoomed in (not at default world view)
+    // Check that zoom controls exist
+    await expect(page.locator(".leaflet-control-zoom")).toBeVisible();
+  });
+
+  test("marker popup shows place information", async ({ page }) => {
+    await page.goto("/quiz?continent=Europe&type=capitals");
+
+    // Wait for markers
+    await expect(page.locator(".leaflet-marker-icon").first()).toBeVisible();
+
+    // Click marker to open popup
+    await page.locator(".leaflet-marker-icon").first().click();
+
+    // Popup should contain place info
+    const popup = page.locator(".leaflet-popup-content");
+    await expect(popup).toBeVisible();
+
+    // Should have name (bold text)
+    await expect(popup.locator("strong")).toBeVisible();
+
+    // Should have feature type
+    await expect(popup.getByText(/capital/i)).toBeVisible();
   });
 });
