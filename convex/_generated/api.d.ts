@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as areas from "../areas.js";
+import type * as places from "../places.js";
 import type * as seed from "../seed.js";
 
 import type {
@@ -17,6 +19,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  areas: typeof areas;
+  places: typeof places;
   seed: typeof seed;
 }>;
 
