@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@tanstack/react-router": "^1.95.5",
@@ -17,6 +19,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
+    "@playwright/test": "^1.57.0",
     "@tailwindcss/vite": "^4.0.7",
     "@tanstack/router-devtools": "^1.95.5",
     "@tanstack/router-plugin": "^1.95.5",
