@@ -9,6 +9,7 @@
  */
 
 import type * as areas from "../areas.js";
+import type * as import_ from "../import.js";
 import type * as places from "../places.js";
 import type * as seed from "../seed.js";
 
@@ -20,6 +21,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   areas: typeof areas;
+  import: typeof import_;
   places: typeof places;
   seed: typeof seed;
 }>;
