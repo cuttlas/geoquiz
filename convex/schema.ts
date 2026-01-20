@@ -16,13 +16,16 @@ export default defineSchema({
     population: v.optional(v.number()),
     imageUrl: v.optional(v.string()),
     wikipediaUrl: v.optional(v.string()),
+    // Source tracking for idempotent imports (required for upserts)
+    wikidataId: v.string(), // e.g., "Q90" for Paris
   })
     .index("by_continent", ["continentName"])
     .index("by_country", ["countryCode"])
     .index("by_adm1", ["adm1Id"])
     .index("by_adm2", ["adm2Id"])
     .index("by_continent_type", ["continentName", "featureType"])
-    .index("by_country_type", ["countryCode", "featureType"]),
+    .index("by_country_type", ["countryCode", "featureType"])
+    .index("by_wikidata_id", ["wikidataId"]),
 
   // Countries, states, provinces, counties, etc.
   areas: defineTable({
@@ -36,11 +39,14 @@ export default defineSchema({
     centroidLat: v.number(),
     centroidLng: v.number(),
     geometryId: v.optional(v.id("geometries")),
+    // Source tracking for idempotent imports (required for upserts)
+    geoboundariesId: v.string(), // e.g., "USA-ADM1-California"
   })
     .index("by_slug", ["slug"])
     .index("by_parent", ["parentAreaId"])
     .index("by_continent_level", ["continentName", "adminLevel"])
-    .index("by_country_level", ["countryCode", "adminLevel"]),
+    .index("by_country_level", ["countryCode", "adminLevel"])
+    .index("by_geoboundaries_id", ["geoboundariesId"]),
 
   // GeoJSON geometries (stored separately due to size)
   geometries: defineTable({

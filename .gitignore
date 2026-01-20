@@ -41,3 +41,6 @@ test-results/
 
 # Old project reference
 geoquiz-old/
+
+# Import script cache
+scripts/data/

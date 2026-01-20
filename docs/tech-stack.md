@@ -69,13 +69,16 @@ export default defineSchema({
     population: v.optional(v.number()),
     imageUrl: v.optional(v.string()),
     wikipediaUrl: v.optional(v.string()),
+    // Source tracking for idempotent imports
+    wikidataId: v.optional(v.string()),  // e.g., "Q90" for Paris
   })
     .index("by_continent", ["continentName"])
     .index("by_country", ["countryCode"])
     .index("by_adm1", ["adm1Id"])
     .index("by_adm2", ["adm2Id"])
     .index("by_continent_type", ["continentName", "featureType"])
-    .index("by_country_type", ["countryCode", "featureType"]),
+    .index("by_country_type", ["countryCode", "featureType"])
+    .index("by_wikidata_id", ["wikidataId"]),
 
   // Countries, states, provinces, counties, etc.
   areas: defineTable({
@@ -89,11 +92,14 @@ export default defineSchema({
     centroidLat: v.number(),
     centroidLng: v.number(),
     geometryId: v.optional(v.id("geometries")),
+    // Source tracking for idempotent imports
+    geoboundariesId: v.optional(v.string()),  // e.g., "USA-ADM1-06"
   })
     .index("by_slug", ["slug"])
     .index("by_parent", ["parentAreaId"])
     .index("by_continent_level", ["continentName", "adminLevel"])
-    .index("by_country_level", ["countryCode", "adminLevel"]),
+    .index("by_country_level", ["countryCode", "adminLevel"])
+    .index("by_geoboundaries_id", ["geoboundariesId"]),
 
   // GeoJSON geometries (stored separately due to size)
   geometries: defineTable({
@@ -264,7 +270,7 @@ export const getByAdm2 = query({
 
 ---
 
-## Data Sources
+## Data Sources & Import
 
 ### Places Data: Wikidata
 - Source: Wikidata Query Service (SPARQL)
@@ -276,20 +282,72 @@ export const getByAdm2 = query({
 - Data: Administrative boundaries (countries, states, counties)
 - Fields: Name, geometry, admin level, centroid, parent reference
 
+### Import Scripts
+
+The `scripts/` directory contains Node.js scripts to import real data:
+
+```bash
+# Import areas (countries, states, counties) from GeoBoundaries
+npm run import:areas
+
+# Import places (cities, capitals) from Wikidata
+npm run import:places
+
+# Import everything in order
+npm run import:all
+```
+
+**Configuration:** Edit `scripts/config.ts` to adjust:
+- `populationThreshold`: Minimum population for cities (default: 100,000)
+- `adm1Countries`: Countries to import state/province data for
+- `adm2Countries`: Countries to import county/district data for
+- `simplifyTolerance`: GeoJSON simplification factor
+
+**Import order matters:**
+1. Areas ADM0 (countries) - no parent references
+2. Areas ADM1 (states) - reference countries
+3. Areas ADM2 (counties) - reference states
+4. Places - reference areas via spatial matching
+
+**Re-running imports:**
+- Imports are idempotent using source IDs (`wikidataId`, `geoboundariesId`)
+- Re-running will update existing records, not create duplicates
+
+### Import Dependencies
+
+```json
+{
+  "@turf/center-of-mass": "^7.x",  // Centroid calculation
+  "@turf/simplify": "^7.x",        // Geometry simplification
+  "@turf/boolean-point-in-polygon": "^7.x",  // Spatial matching
+  "axios": "^1.x",                 // HTTP client
+  "country-iso-2-to-3": "^1.x",    // Country code conversion
+  "slugify": "^1.x"                // URL-friendly slugs
+}
+```
+
 ---
 
 ## Project Structure
 
 ```
-budapest/
+hartford/
 ├── convex/                    # Convex backend
 │   ├── schema.ts              # Database schema
 │   ├── places.ts              # Place queries
-│   └── areas.ts               # Area queries
+│   ├── areas.ts               # Area queries
+│   ├── seed.ts                # Mock data seeding
+│   └── import.ts              # Bulk import mutations
 │
 ├── scripts/                   # Data import scripts
-│   ├── import-wikidata.ts     # Fetch places from Wikidata
-│   └── import-geoboundaries.ts# Fetch areas from GeoBoundaries
+│   ├── config.ts              # Import configuration
+│   ├── import-areas.ts        # GeoBoundaries → Convex
+│   ├── import-places.ts       # Wikidata → Convex
+│   ├── lib/
+│   │   ├── geoboundaries.ts   # GeoBoundaries API client
+│   │   ├── wikidata.ts        # Wikidata SPARQL client
+│   │   └── geo-utils.ts       # Centroid, slug, simplify helpers
+│   └── data/                  # GeoJSON cache (gitignored)
 │
 ├── src/
 │   ├── main.tsx               # App entry point
@@ -301,29 +359,31 @@ budapest/
 │   │   └── quiz.tsx           # Quiz page (reads URL search params)
 │   │
 │   ├── components/            # React components
-│   │   ├── QuizGenerator.tsx  # Cascading scope selector
-│   │   ├── QuizMap.tsx        # Leaflet map
-│   │   ├── QuizSidebar.tsx    # Quiz controls
-│   │   ├── CascadingSelect.tsx# Reusable cascading dropdown
-│   │   ├── MapLayerSelector.tsx
-│   │   └── ThemeToggle.tsx
+│   │   ├── QuizSelector.tsx   # Cascading scope selector
+│   │   ├── map/
+│   │   │   ├── QuizMap.tsx    # Leaflet map
+│   │   │   └── PlaceMarker.tsx
+│   │   └── ui/                # shadcn/ui components
 │   │
 │   └── lib/                   # Utilities
+│       ├── types.ts
 │       └── utils.ts
 │
 ├── e2e/                       # Playwright tests
-│   ├── generator.spec.ts
+│   ├── home.spec.ts
+│   ├── quiz-selector.spec.ts
 │   └── quiz.spec.ts
 │
+├── docs/                      # Documentation
+│   ├── requirements.md
+│   └── tech-stack.md
+│
 ├── public/                    # Static assets
-│   └── icon.png
 │
 ├── package.json
 ├── vite.config.ts
-├── tailwind.config.ts
 ├── tsconfig.json
-├── playwright.config.ts
-└── convex.json
+└── playwright.config.ts
 ```
 
 ---
@@ -344,17 +404,23 @@ VITE_CONVEX_URL=<your-convex-url>
 # Install dependencies
 npm install
 
-# Start Convex dev server
+# Start Convex dev server (deploys backend)
 npx convex dev
 
-# Start Vite dev server
+# Start Vite dev server (frontend)
 npm run dev
 
-# Run Playwright tests
-npx playwright test
+# Run Playwright E2E tests
+npm run test:e2e
 
 # Build for production
 npm run build
+
+# Import real data (requires CONVEX_URL environment variable)
+export CONVEX_URL=<your-convex-url>
+npm run import:areas    # Import countries, states, counties
+npm run import:places   # Import cities, capitals
+npm run import:all      # Import everything in order
 ```
 
 ---
