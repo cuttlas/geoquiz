@@ -16,8 +16,8 @@ export default defineSchema({
     population: v.optional(v.number()),
     imageUrl: v.optional(v.string()),
     wikipediaUrl: v.optional(v.string()),
-    // Source tracking for idempotent imports (required for upserts)
-    wikidataId: v.string(), // e.g., "Q90" for Paris
+    // Source tracking for idempotent imports
+    wikidataId: v.optional(v.string()), // e.g., "Q90" for Paris
   })
     .index("by_continent", ["continentName"])
     .index("by_country", ["countryCode"])
@@ -39,8 +39,8 @@ export default defineSchema({
     centroidLat: v.number(),
     centroidLng: v.number(),
     geometryId: v.optional(v.id("geometries")),
-    // Source tracking for idempotent imports (required for upserts)
-    geoboundariesId: v.string(), // e.g., "USA-ADM1-California"
+    // Source tracking for idempotent imports
+    geoboundariesId: v.optional(v.string()), // e.g., "USA-ADM1-California"
   })
     .index("by_slug", ["slug"])
     .index("by_parent", ["parentAreaId"])

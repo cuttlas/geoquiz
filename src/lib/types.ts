@@ -63,6 +63,11 @@ export interface Area {
   geometryId?: Id<"geometries">;
 }
 
+// Area with geometry data for regions quiz
+export interface AreaWithGeometry extends Area {
+  geojson: string | null;
+}
+
 // Place type from Convex
 export interface Place {
   _id: Id<"places">;
