@@ -73,3 +73,50 @@ export const hasChildren = query({
     return child !== null;
   },
 });
+
+// Get child areas with their geometries for regions quiz
+export const getAreasWithGeometries = query({
+  args: {
+    parentAreaId: v.optional(v.id("areas")),
+    continentName: v.optional(v.string()),
+    adminLevel: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    let areas;
+
+    if (args.parentAreaId) {
+      // Get children of specific parent
+      areas = await ctx.db
+        .query("areas")
+        .withIndex("by_parent", (q) => q.eq("parentAreaId", args.parentAreaId))
+        .collect();
+    } else if (args.continentName !== undefined && args.adminLevel !== undefined) {
+      // Get areas by continent and admin level (for countries)
+      const continentName = args.continentName;
+      const adminLevel = args.adminLevel;
+      areas = await ctx.db
+        .query("areas")
+        .withIndex("by_continent_level", (q) =>
+          q.eq("continentName", continentName).eq("adminLevel", adminLevel)
+        )
+        .collect();
+    } else {
+      return [];
+    }
+
+    // Fetch geometries for each area
+    const areasWithGeometry = await Promise.all(
+      areas.map(async (area) => {
+        let geojson: string | null = null;
+        if (area.geometryId) {
+          const geometry = await ctx.db.get(area.geometryId);
+          geojson = geometry?.geojson ?? null;
+        }
+        return { ...area, geojson };
+      })
+    );
+
+    // Filter out areas without geometries for the quiz
+    return areasWithGeometry.filter((a) => a.geojson !== null);
+  },
+});

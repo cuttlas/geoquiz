@@ -56,7 +56,7 @@ test.describe("Quiz Page - Map View", () => {
     await expect(page.locator(".leaflet-popup-content")).toBeVisible();
   });
 
-  test("shows message for regions quiz (not yet supported)", async ({
+  test("displays map with region polygons for European countries", async ({
     page,
   }) => {
     await page.goto("/quiz?continent=Europe&type=regions");
@@ -66,10 +66,70 @@ test.describe("Quiz Page - Map View", () => {
       page.getByRole("heading", { name: /Quiz: Regions/i })
     ).toBeVisible();
 
-    // Should show not supported message
+    // Should show breadcrumb
+    await expect(page.getByText("Europe")).toBeVisible();
+
+    // Should show regions count
+    await expect(page.getByText(/\d+ regions/)).toBeVisible();
+
+    // Should display Leaflet map container
+    await expect(page.locator(".leaflet-container")).toBeVisible();
+
+    // Should have SVG polygons rendered (Leaflet renders polygons as SVG paths)
+    await expect(page.locator(".leaflet-interactive").first()).toBeVisible();
+  });
+
+  test("clicking region shows info panel", async ({ page }) => {
+    await page.goto("/quiz?continent=Europe&type=regions");
+
+    // Wait for map and polygons to load
+    await expect(page.locator(".leaflet-container")).toBeVisible();
+    await expect(page.locator(".leaflet-interactive").first()).toBeVisible();
+
+    // Click on a polygon
+    await page.locator(".leaflet-interactive").first().click();
+
+    // Should show info panel
+    await expect(page.locator(".absolute.bottom-4.left-4")).toBeVisible();
+
+    // Info panel should have region name
     await expect(
-      page.getByText(/Regions quiz not yet supported on map/)
+      page.locator(".absolute.bottom-4.left-4 h3")
     ).toBeVisible();
+  });
+
+  test("region popup shows region information", async ({ page }) => {
+    await page.goto("/quiz?continent=Europe&type=regions");
+
+    // Wait for polygons
+    await expect(page.locator(".leaflet-interactive").first()).toBeVisible();
+
+    // Click polygon to open popup
+    await page.locator(".leaflet-interactive").first().click();
+
+    // Popup should contain region info
+    const popup = page.locator(".leaflet-popup-content");
+    await expect(popup).toBeVisible();
+
+    // Should have name (bold text)
+    await expect(popup.locator("strong")).toBeVisible();
+  });
+
+  test("can close region info panel", async ({ page }) => {
+    await page.goto("/quiz?continent=Europe&type=regions");
+
+    // Wait for polygons and click one
+    await expect(page.locator(".leaflet-interactive").first()).toBeVisible();
+    await page.locator(".leaflet-interactive").first().click();
+
+    // Info panel should be visible
+    await expect(page.locator(".absolute.bottom-4.left-4")).toBeVisible();
+
+    // Click close button
+    await page.locator(".absolute.bottom-4.left-4 button").click();
+
+    // Info panel should be hidden
+    await expect(page.locator(".absolute.bottom-4.left-4")).not.toBeVisible();
   });
 
   test("filters cities by country", async ({ page }) => {
